@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Field Tracker">
+<title>FIELD TRACKER</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;600&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --lime: #b8ff3c; --dark: #0d1f0d; --dim: #4a6a3a; --white: #f0f4e8; --red: #ff5252; }
+  html, body { height: 100%; background: var(--dark); font-family: 'IBM Plex Mono', monospace; color: var(--white); overflow: hidden; }
+  .app { display: flex; flex-direction: column; height: 100dvh; }
+  .hud { background: rgba(13,31,13,0.95); border-bottom: 1px solid rgba(184,255,60,0.15); padding: 10px 14px 8px; z-index: 1000; flex-shrink: 0; }
+  .hud-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .hud-title { font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 0.25em; color: var(--lime); }
+  .status-pill { font-size: 0.55rem; letter-spacing: 0.15em; padding: 3px 8px; border-radius: 20px; border: 1px solid var(--dim); color: var(--dim); display: flex; align-items: center; gap: 5px; }
+  .status-pill.active { border-color: var(--lime); color: var(--lime); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--dim); }
+  .dot.active { background: var(--lime); box-shadow: 0 0 6px var(--lime); animation: blink 1.2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+  .stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+  .stat { text-align: center; }
+  .stat-val { font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem; line-height: 1; color: var(--white); }
+  .stat-val.highlight { color: var(--lime); text-shadow: 0 0 12px rgba(184,255,60,0.5); }
+  .stat-lbl { font-size: 0.5rem; color: var(--dim); letter-spacing: 0.15em; margin-top: 1px; }
+  .prog-wrap { margin-top: 8px; }
+  .prog-row { display: flex; justify-content: space-between; font-size: 0.55rem; color: var(--dim); letter-spacing: 0.1em; margin-bottom: 4px; }
+  .prog-track { height: 4px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
+  .prog-fill { height: 100%; background: linear-gradient(90deg, var(--dim), var(--lime)); border-radius: 2px; width: 0%; transition: width 0.5s ease; box-shadow: 0 0 6px rgba(184,255,60,0.4); }
+  #map { flex: 1; z-index: 1; }
+  .controls { background: rgba(13,31,13,0.97); border-top: 1px solid rgba(184,255,60,0.15); padding: 10px 14px 16px; display: flex; gap: 10px; flex-shrink: 0; z-index: 1000; }
+  .btn-main { flex: 1; padding: 16px; border: none; border-radius: 10px; font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; letter-spacing: 0.2em; cursor: pointer; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+  .btn-main.start { background: var(--lime); color: var(--dark); box-shadow: 0 0 20px rgba(184,255,60,0.3); }
+  .btn-main.stop { background: transparent; color: var(--red); border: 2px solid var(--red); }
+  .btn-find { padding: 16px 18px; background: rgba(184,255,60,0.08); border: 1px solid rgba(184,255,60,0.25); border-radius: 10px; font-size: 1.3rem; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .btn-find:active { background: rgba(184,255,60,0.2); }
+  .btn-reset { padding: 16px 18px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: var(--dim); font-family: 'IBM Plex Mono', monospace; font-size: 0.7rem; letter-spacing: 0.1em; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  .btn-reset:active { color: var(--white); }
+  .flash { position: fixed; inset: 0; background: rgba(184,255,60,0.18); pointer-events: none; opacity: 0; z-index: 9999; transition: opacity 0.06s; }
+  .flash.show { opacity: 1; }
+  .toast { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.8); background: rgba(13,31,13,0.97); border: 2px solid var(--lime); border-radius: 16px; padding: 20px 30px; text-align: center; z-index: 9998; opacity: 0; transition: all 0.2s; pointer-events: none; box-shadow: 0 0 40px rgba(184,255,60,0.3); }
+  .toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  .toast-num { font-family: 'Bebas Neue', sans-serif; font-size: 4rem; color: var(--lime); line-height: 1; }
+  .toast-lbl { font-size: 0.65rem; letter-spacing: 0.3em; color: var(--dim); margin-top: 4px; }
+  .leaflet-control-attribution, .leaflet-control-zoom { display: none !important; }
+</style>
+</head>
+<body>
+<div class="flash" id="flash"></div>
+<div class="toast" id="toast"><div class="toast-num" id="toastNum">1</div><div class="toast-lbl">FIELD COMPLETE</div></div>
+<div class="app">
+  <div class="hud">
+    <div class="hud-top">
+      <div class="hud-title">⚡ FIELD TRACKER</div>
+      <div class="status-pill" id="statusPill"><div class="dot" id="dot"></div><span id="statusText">READY</span></div>
+    </div>
+    <div class="stats-row">
+      <div class="stat"><div class="stat-val highlight" id="statFields">0</div><div class="stat-lbl">FIELDS</div></div>
+      <div class="stat"><div class="stat-val" id="statYards">0</div><div class="stat-lbl">YARDS</div></div>
+      <div class="stat"><div class="stat-val" id="statFeet">0</div><div class="stat-lbl">FEET</div></div>
+      <div class="stat"><div class="stat-val" id="statMeters">0</div><div class="stat-lbl">METERS</div></div>
+    </div>
+    <div class="prog-wrap">
+      <div class="prog-row"><span>TO NEXT FIELD</span><span id="progPct">0%</span></div>
+      <div class="prog-track"><div class="prog-fill" id="progFill"></div></div>
+    </div>
+  </div>
+  <div id="map"></div>
+  <div class="controls">
+    <button class="btn-main start" id="mainBtn" onclick="toggleTracking()">START</button>
+    <button class="btn-find" onclick="findMe()">📍</button>
+    <button class="btn-reset" onclick="resetAll()">↺<br>RESET</button>
+  </div>
+</div>
+<script>
+const map = L.map('map', { zoomControl: false, attributionControl: false });
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 22 }).addTo(map);
+map.setView([33.0, -84.5], 17);
+const trail = L.polyline([], { color: '#b8ff3c', weight: 4, opacity: 0.85 }).addTo(map);
+const playerIcon = L.divIcon({ className: '', html: `<div style="width:18px;height:18px;border-radius:50%;background:#b8ff3c;border:3px solid #0d1f0d;box-shadow:0 0 0 4px rgba(184,255,60,0.3),0 0 16px rgba(184,255,60,0.5);"></div>`, iconSize: [18,18], iconAnchor: [9,9] });
+const startIcon = L.divIcon({ className: '', html: `<div style="width:12px;height:12px;border-radius:50%;background:#fff;border:2px solid #0d1f0d;box-shadow:0 0 8px rgba(255,255,255,0.5);"></div>`, iconSize: [12,12], iconAnchor: [6,6] });
+let playerMarker=null, startMarker=null, tracking=false, watchId=null, lastPos=null, totalMeters=0;
+const FIELD=91.44;
+
+function haversine(a,b,c,d){const R=6371000,dL=(c-a)*Math.PI/180,dl=(d-b)*Math.PI/180,x=Math.sin(dL/2)**2+Math.cos(a*Math.PI/180)*Math.cos(c*Math.PI/180)*Math.sin(dl/2)**2;return R*2*Math.atan2(Math.sqrt(x),Math.sqrt(1-x));}
+
+function updateDisplay(lat,lon){
+  const fields=Math.floor(totalMeters/FIELD),rem=totalMeters%FIELD,pct=Math.round(rem/FIELD*100);
+  const prev=parseInt(document.getElementById('statFields').textContent)||0;
+  document.getElementById('statFields').textContent=fields;
+  document.getElementById('statYards').textContent=Math.round(totalMeters*1.09361);
+  document.getElementById('statFeet').textContent=Math.round(totalMeters*3.28084);
+  document.getElementById('statMeters').textContent=Math.round(totalMeters);
+  document.getElementById('progFill').style.width=pct+'%';
+  document.getElementById('progPct').textContent=pct+'%';
+  const latlng=[lat,lon];
+  trail.addLatLng(latlng);
+  if(!playerMarker){playerMarker=L.marker(latlng,{icon:playerIcon}).addTo(map);}else{playerMarker.setLatLng(latlng);}
+  map.setView(latlng,map.getZoom()<18?19:map.getZoom());
+  if(fields>prev&&totalMeters>5){flashComplete(fields);}
+}
+
+function flashComplete(n){
+  document.getElementById('toastNum').textContent=n;
+  const flash=document.getElementById('flash'),toast=document.getElementById('toast');
+  flash.classList.add('show');toast.classList.add('show');
+  if(navigator.vibrate)navigator.vibrate([100,50,100]);
+  setTimeout(()=>{flash.classList.remove('show');toast.classList.remove('show');},1800);
+}
+
+function setStatus(text,active){
+  document.getElementById('statusText').textContent=text;
+  document.getElementById('dot').className=active?'dot active':'dot';
+  document.getElementById('statusPill').className=active?'status-pill active':'status-pill';
+}
+
+function findMe(){
+  if(playerMarker){map.setView(playerMarker.getLatLng(),19);}
+  else if(navigator.geolocation){navigator.geolocation.getCurrentPosition(pos=>{map.setView([pos.coords.latitude,pos.coords.longitude],19);},null,{enableHighAccuracy:true});}
+}
+
+function toggleTracking(){tracking?stopTracking():startTracking();}
+
+function startTracking(){
+  if(!navigator.geolocation){setStatus('NO GPS',false);return;}
+  tracking=true;
+  document.getElementById('mainBtn').textContent='STOP';
+  document.getElementById('mainBtn').className='btn-main stop';
+  setStatus('ACQUIRING...',true);
+  watchId=navigator.geolocation.watchPosition(pos=>{
+    const{latitude:lat,longitude:lon,accuracy:acc}=pos.coords;
+    setStatus('GPS ±'+Math.round(acc)+'M',true);
+    if(!startMarker){startMarker=L.marker([lat,lon],{icon:startIcon}).addTo(map);map.setView([lat,lon],19);}
+    if(acc>25)return;
+    if(lastPos){const d=haversine(lastPos.lat,lastPos.lon,lat,lon);if(d>0.3&&d<50){totalMeters+=d;updateDisplay(lat,lon);}}
+    else{updateDisplay(lat,lon);}
+    lastPos={lat,lon};
+  },err=>{setStatus('ALLOW LOCATION IN SAFARI',false);},{enableHighAccuracy:true,maximumAge:500,timeout:15000});
+}
+
+function stopTracking(){
+  tracking=false;
+  if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}
+  lastPos=null;
+  document.getElementById('mainBtn').textContent='RESUME';
+  document.getElementById('mainBtn').className='btn-main start';
+  setStatus('PAUSED',false);
+}
+
+function resetAll(){
+  tracking=false;
+  if(watchId!==null){navigator.geolocation.clearWatch(watchId);watchId=null;}
+  lastPos=null;totalMeters=0;
+  trail.setLatLngs([]);
+  if(playerMarker){try{map.removeLayer(playerMarker);}catch(e){}playerMarker=null;}
+  if(startMarker){try{map.removeLayer(startMarker);}catch(e){}startMarker=null;}
+  document.getElementById('statFields').textContent='0';
+  document.getElementById('statYards').textContent='0';
+  document.getElementById('statFeet').textContent='0';
+  document.getElementById('statMeters').textContent='0';
+  document.getElementById('progFill').style.width='0%';
+  document.getElementById('progPct').textContent='0%';
+  document.getElementById('mainBtn').textContent='START';
+  document.getElementById('mainBtn').className='btn-main start';
+  setStatus('READY',false);
+}
+</script>
+</body>
+</html>
